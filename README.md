@@ -1,1 +1,1 @@
-Maybe someday i finish that
+Future game based on Vulkan api
