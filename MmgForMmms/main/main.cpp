@@ -7,6 +7,10 @@
 #include <cstring>
 #include <cstdlib>
 #include <optional>
+#include <set>
+
+using namespace std;
+
 GLFWwindow* window;
 
 const uint32_t WIDTH = 800;
@@ -21,7 +25,20 @@ const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
+/*
+Colorful printf
+"\x1b[38;2;21;237;79m%s\x1b[0m\n"
 
+    \x1b - ASCII start
+    [ - start of code
+    38 - selection of coloring mode
+    2 - 256 color space
+    21 - red
+    237 - green
+    79 blur
+    0m - default ASCII attributes
+    \n - new line
+*/
 
 //Window class
 class MmgForMmmsApp {
@@ -36,11 +53,16 @@ public:
 
 private:
     VkInstance instance;
+
     VkDebugUtilsMessengerEXT debugMessenger;
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device;
+
     VkQueue graphicsQueue;
+    VkQueue presentQueue;
+
+    VkSurfaceKHR surface;
 
     //Init of GLFW window
     void initWindow() {
@@ -50,23 +72,40 @@ private:
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "MmgForMmms", nullptr, nullptr);
+        printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "glfw window init complete!");
     }
 
     //Init of Vulkan api
     void initVulkan() {
         createInstance();
+
         setupDebugMessenger();
+        
+        createSurface();
+
         pickPhysicalDevice();
         createLogicalDevice();
+        printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "vulkan init complete!");
+    }
+
+    //Window surface for drawing on it
+    void createSurface() {
+        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create window surface!");
+        }
+        else {
+            printf("\x1b[38;2;17;255;0m%s\x1b[0m\n", "window surface successfuly created!");
+        }
     }
 
     //Queue families
     struct QueueFamilyIndices {
         //Using optional to see if family null or not
         std::optional<uint32_t> graphicsFamily;
+        std::optional<uint32_t> presentFamily;
 
         bool isComplete() {
-            return graphicsFamily.has_value();
+            return graphicsFamily.has_value() && presentFamily.has_value();
         }
     };
 
@@ -83,6 +122,16 @@ private:
         for (const auto& queueFamily : queueFamilies) {
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = i;
+            }
+
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+
+            if (presentSupport) {
+                indices.presentFamily = i;
+            }
+            if (indices.isComplete()) {
+                break;
             }
 
             i++;
@@ -105,6 +154,10 @@ private:
         if (deviceCount == 0) {
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
+        else
+        {
+            printf("\x1b[38;2;0;209;10m%s\x1b[0m\n", "found GPU with Vulkan support!");
+        }
 
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
@@ -119,6 +172,10 @@ private:
         if (physicalDevice == VK_NULL_HANDLE) {
             throw std::runtime_error("failed to find a suitable GPU!");
         }
+        else
+        {
+            printf("\x1b[38;2;0;209;10m%s\x1b[0m\n", "picked suitable GPU!");
+        }
     }
 
 
@@ -131,8 +188,19 @@ private:
         queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
         queueCreateInfo.queueCount = 1;
 
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
         //Priority of queue (from 0.0 to 1.0)
         float queuePriority = 1.0f;
+        for (uint32_t queueFamily : uniqueQueueFamilies) {
+            VkDeviceQueueCreateInfo queueCreateInfo{};
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = queueFamily;
+            queueCreateInfo.queueCount = 1;
+            queueCreateInfo.pQueuePriorities = &queuePriority;
+            queueCreateInfos.push_back(queueCreateInfo);
+        }
         queueCreateInfo.pQueuePriorities = &queuePriority;
 
         VkPhysicalDeviceFeatures deviceFeatures{};
@@ -140,8 +208,8 @@ private:
         VkDeviceCreateInfo createInfo{};
 
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.pQueueCreateInfos = &queueCreateInfo;
-        createInfo.queueCreateInfoCount = 1;
+        createInfo.pQueueCreateInfos = queueCreateInfos.data();
+        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());;
         createInfo.pEnabledFeatures = &deviceFeatures;
 
         createInfo.enabledExtensionCount = 0;
@@ -158,9 +226,9 @@ private:
             throw std::runtime_error("failed to create logical device!");
         }
         else {
-            printf("Successfuly created logical device");
+            printf("\x1b[38;2;0;209;10m%s\x1b[0m\n", "successfuly created logical device!");
         }
-        vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+        vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -194,6 +262,10 @@ private:
         if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
             throw std::runtime_error("failed to set up debug messenger!");
         }
+        else
+        {
+            printf("\x1b[38;2;123;255;8m%s\x1b[0m\n", "debug messenger setup is successful!");
+        }
     }
 
     //Create debug messenger
@@ -224,17 +296,23 @@ private:
 
     //Cleanup after finishing app work
     void cleanup() {
+        printf("\x1b[38;2;21;237;79m%s\x1b[0m\n", "cleaning!");
+
         vkDestroyDevice(device, nullptr);
 
         if (enableValidationLayers) {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
 
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+
         vkDestroyInstance(instance, nullptr);
 
         glfwDestroyWindow(window);
 
         glfwTerminate();
+
+        printf("\x1b[38;2;21;237;79m%s\x1b[0m\n", "cleaning successful!");
     }
 
     //Check if layer supported
