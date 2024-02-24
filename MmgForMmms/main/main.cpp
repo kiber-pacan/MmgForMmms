@@ -72,7 +72,7 @@ private:
 
     VkPresentModeKHR presentMode;
 
-    //Init of GLFW window
+    //Init of GLFW windoww
     void initWindow() {
         glfwInit();
 
