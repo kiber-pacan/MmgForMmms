@@ -8,6 +8,10 @@
 #include <cstdlib>
 #include <optional>
 #include <set>
+#include <cstdint> // Necessary for uint32_t
+#include <limits> // Necessary for std::numeric_limits
+#include <algorithm> // Necessary for std::clamp
+
 
 using namespace std;
 
@@ -72,7 +76,7 @@ private:
 
     VkPresentModeKHR presentMode;
 
-    //Init of GLFW windoww
+    //Init of GLFW window
     void initWindow() {
         glfwInit();
 
@@ -93,6 +97,9 @@ private:
 
         pickPhysicalDevice();
         createLogicalDevice();
+
+        createSwapChain();
+
         printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "vulkan init complete!");
     }
 
@@ -130,6 +137,42 @@ private:
         return details;
     }
 
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+            return capabilities.currentExtent;
+        }
+        else {
+            int width, height;
+            glfwGetFramebufferSize(window, &width, &height);
+
+            VkExtent2D actualExtent = {
+                static_cast<uint32_t>(width),
+                static_cast<uint32_t>(height)
+            };
+
+            actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+            return actualExtent;
+        }
+    }
+
+    //Creating swap chain
+    void createSwapChain() {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+
+        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+        VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+        VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+        //TODO MULTIBUFFERING!!!!!!
+        uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+    
+        if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+            imageCount = swapChainSupport.capabilities.maxImageCount;
+        }
+    }
+
     //Window surface for drawing on it
     void createSurface() {
         if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
@@ -138,6 +181,28 @@ private:
         else {
             printf("\x1b[38;2;17;255;0m%s\x1b[0m\n", "window surface successfuly created!");
         }
+    }
+
+    //Checking if one of the formats is appropriate and then returning it
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+        for (const auto& availableFormat : availableFormats) {
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                return availableFormat;
+            }
+        }
+
+        return availableFormats[0];
+    }
+
+    //Checks if VK_PRESENT_MODE_MAILBOX_KHR is avaliable and then return it, if not then return guaranteed to be available VK_PRESENT_MODE_FIFO_KHR
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+        for (const auto& availablePresentMode : availablePresentModes) {
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+                return availablePresentMode;
+            }
+        }
+
+        return VK_PRESENT_MODE_FIFO_KHR;
     }
 
     //Queue families
@@ -207,10 +272,12 @@ private:
 
         std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
 
+        //if extension is supported it removes from set
         for (const auto& extension : availableExtensions) {
             requiredExtensions.erase(extension.extensionName);
         }
 
+        //if all extensions is supported then set gonna be empty and func return true
         return requiredExtensions.empty();
     }
 
