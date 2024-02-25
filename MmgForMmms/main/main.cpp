@@ -76,6 +76,13 @@ private:
 
     VkPresentModeKHR presentMode;
 
+    VkSwapchainKHR swapChain;
+    std::vector<VkImage> swapChainImages;
+    VkFormat swapChainImageFormat;
+    VkExtent2D swapChainExtent;
+    std::vector<VkImageView> swapChainImageViews;
+
+
     //Init of GLFW window
     void initWindow() {
         glfwInit();
@@ -99,8 +106,44 @@ private:
         createLogicalDevice();
 
         createSwapChain();
+        createImageViews();
 
+        createGraphicsPipeline();
+
+        printf("------------------------------------------------------------------------------------------------------------------------\n");
         printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "vulkan init complete!");
+    }
+
+    //Graphics
+    void createGraphicsPipeline() {
+
+    }
+
+    //Image views
+    void createImageViews() {
+        swapChainImageViews.resize(swapChainImages.size());
+
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
+            VkImageViewCreateInfo createInfo{};
+            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            createInfo.image = swapChainImages[i];
+            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            createInfo.format = swapChainImageFormat;
+            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            createInfo.subresourceRange.baseMipLevel = 0;
+            createInfo.subresourceRange.levelCount = 1;
+            createInfo.subresourceRange.baseArrayLayer = 0;
+            createInfo.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create image views!");
+            }
+        }
     }
 
     //Swapchain
@@ -124,21 +167,26 @@ private:
         }
 
         uint32_t presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, &presentMode);
-
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
 
         if (presentModeCount != 0) {
             details.presentModes.resize(presentModeCount);
             vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
         }
 
-        printf("\x1b[38;2;237;237;237m%s\x1b[0m\n", "presentMode");
-
         return details;
     }
 
+    //Get swap chain height and width (extent)
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+        char buffer[26];
+
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+            sprintf_s(buffer, sizeof(buffer), "swap chain width is: %d", capabilities.currentExtent.width);
+            printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", buffer);
+
+            sprintf_s(buffer, sizeof(buffer), "swap chain height is: %d", capabilities.currentExtent.height);
+            printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", buffer);
             return capabilities.currentExtent;
         }
         else {
@@ -165,22 +213,51 @@ private:
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
         VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
-        //TODO MULTIBUFFERING!!!!!!
         uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-    
         if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
             imageCount = swapChainSupport.capabilities.maxImageCount;
         }
-    }
 
-    //Window surface for drawing on it
-    void createSurface() {
-        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create window surface!");
+        VkSwapchainCreateInfoKHR createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        createInfo.surface = surface;
+
+        createInfo.minImageCount = imageCount;
+        createInfo.imageFormat = surfaceFormat.format;
+        createInfo.imageColorSpace = surfaceFormat.colorSpace;
+        createInfo.imageExtent = extent;
+        createInfo.imageArrayLayers = 1;
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+        if (indices.graphicsFamily != indices.presentFamily) {
+            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            createInfo.queueFamilyIndexCount = 2;
+            createInfo.pQueueFamilyIndices = queueFamilyIndices;
         }
         else {
-            printf("\x1b[38;2;17;255;0m%s\x1b[0m\n", "window surface successfuly created!");
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         }
+
+        createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        createInfo.presentMode = presentMode;
+        createInfo.clipped = VK_TRUE;
+
+        createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+        if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create swap chain!");
+        }
+
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
+        swapChainImages.resize(imageCount);
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
+
+        swapChainImageFormat = surfaceFormat.format;
+        swapChainExtent = extent;
     }
 
     //Checking if one of the formats is appropriate and then returning it
@@ -203,6 +280,16 @@ private:
         }
 
         return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    //Window surface for drawing on it
+    void createSurface() {
+        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create window surface!");
+        }
+        else {
+            printf("\x1b[38;2;17;255;0m%s\x1b[0m\n", "window surface successfuly created!");
+        }
     }
 
     //Queue families
@@ -350,8 +437,8 @@ private:
         createInfo.enabledExtensionCount = 0;
 
         if (enableValidationLayers) {
-            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-            createInfo.ppEnabledLayerNames = validationLayers.data();
+            createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+            createInfo.ppEnabledExtensionNames = deviceExtensions.data();
         }
         else {
             createInfo.enabledLayerCount = 0;
@@ -433,6 +520,10 @@ private:
     void cleanup() {
         printf("\x1b[38;2;21;237;79m%s\x1b[0m\n", "cleaning!");
 
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
         vkDestroyDevice(device, nullptr);
 
         if (enableValidationLayers) {
