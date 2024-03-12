@@ -43,7 +43,6 @@ const std::vector<const char*> validationLayers = {
 
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    VK_KHR_SHADER_CLOCK_EXTENSION_NAME
 };
 
 #ifdef NDEBUG
@@ -67,7 +66,7 @@ Colorful printf
 */
 
 struct Vertex {
-    glm::vec2 pos;
+    glm::vec3 pos;
     glm::vec3 color;
     glm::vec2 texCoord;
     float time;
@@ -86,7 +85,7 @@ struct Vertex {
 
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
         attributeDescriptions[1].binding = 0;
@@ -105,10 +104,10 @@ struct Vertex {
 
 //coords, rgb color, texture coordinates
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.25f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.75f, 1.0f, 0.25f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.25f, 0.0f, 0.75f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {0.34f, 0.55f, 0.9f}, {1.0f, 1.0f}}
+    {{1.0f, 0, 2.0f}, {1.0f, 0.0f, 0.25f}, {1.0f, 0.0f}},
+    {{-1.0f, 0, 2.0f}, {0.75f, 1.0f, 0.25f}, {0.0f, 0.0f}},
+    {{-1.0f, 0, -2.0f}, {0.25f, 0.0f, 0.75f}, {0.0f, 1.0f}},
+    {{1.0f, 0, -2.0f}, {0.34f, 0.55f, 0.9f}, {1.0f, 1.0f}}
 };
 
 struct UniformBufferObject {
@@ -155,6 +154,18 @@ public:
         mainLoop();
         printf("\x1b[38;2;255;0;0m%s\x1b[0m\n", "Shutting down!");
         cleanup();
+    }
+
+    //Main loop
+    void mainLoop() {
+
+        while (!glfwWindowShouldClose(window)) {
+            glfwPollEvents();
+            keyCallback(window);
+            drawFrame();
+        }
+
+        vkDeviceWaitIdle(device);
     }
 
 private:
@@ -219,20 +230,44 @@ private:
 
     //Cam data
     camData CameraData = camData();
+    //Mouse position
+    double xpos, ypos;
    
+    //GLFW mouse callback
+    void mouseCallback(GLFWwindow* window) {
+        glfwGetCursorPos(window, &xpos, &ypos);
+
+
+    }
+
     //GLFW key callback        
     void keyCallback(GLFWwindow* window) {
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-            CameraData.lookAt[1] += 0.001;
-        }
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-            CameraData.lookAt[1] -= 0.001;
-        }
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-            CameraData.lookAt[0] -= 0.001;
+            CameraData.lookAt[0] += 0.001;
+            CameraData.camPos[0] += 0.001;
         }
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-            CameraData.lookAt[0] += 0.001;
+            CameraData.lookAt[0] -= 0.001;
+            CameraData.camPos[0] -= 0.001;
+        }
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            CameraData.lookAt[2] -= 0.001;
+            CameraData.camPos[2] -= 0.001;
+        }
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            CameraData.lookAt[2] += 0.001;
+            CameraData.camPos[2] += 0.001;
+        }
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
+            CameraData.lookAt[1] += 0.001;
+            CameraData.camPos[1] += 0.001;
+        }
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            CameraData.lookAt[1] -= 0.001;
+            CameraData.camPos[1] -= 0.001;
+        }
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+            glfwSetWindowShouldClose(window, 1);
         }
     }
 
@@ -244,6 +279,8 @@ private:
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "MmgForMmms", nullptr, nullptr);
+
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
         printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "GLFW window init complete!");
     }
@@ -346,6 +383,25 @@ private:
         printf("------------------------------------------------------------------------------------------------------------------------\n");
         printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "Vulkan API initialization complete!");
     }
+
+
+    //UBO in vertex shader
+    void updateUniformBuffer(uint32_t currentImage) {
+        static auto startTime = std::chrono::high_resolution_clock::now();
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+        UniformBufferObject ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f), 0.f, glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.view = glm::lookAt(CameraData.camPos, CameraData.lookAt, CameraData.upVector);
+        ubo.proj = glm::perspective(glm::radians(120.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.2f, 1024.0f);
+        ubo.proj[1][1] *= -1;
+        ubo.time = time;
+
+        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+    }
+
 
     //Sampler for applying things like filtering and transformation
     void createTextureSampler() {
@@ -1400,13 +1456,8 @@ private:
 
         createInfo.enabledExtensionCount = 0;
 
-        if (enableValidationLayers) {
-            createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-            createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-        }
-        else {
-            createInfo.enabledLayerCount = 0;
-        }
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
         if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
             throw std::runtime_error("failed to create logical device!");
@@ -1475,17 +1526,7 @@ private:
         }
     }
 
-    //GLFW loop
-    void mainLoop() {
-
-        while (!glfwWindowShouldClose(window)) {
-            glfwPollEvents();
-            keyCallback(window);
-            drawFrame();
-        }
-
-        vkDeviceWaitIdle(device);
-    }
+    //Drawing one frame on screen
     void drawFrame() {
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -1550,22 +1591,6 @@ private:
         }
 
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-    }
-
-    void updateUniformBuffer(uint32_t currentImage) {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-        UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-        ubo.view = glm::lookAt(CameraData.camPos, CameraData.lookAt, CameraData.upVector);
-        ubo.proj = glm::perspective(glm::radians(90.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 256.0f);
-        ubo.proj[1][1] *= -1;
-        ubo.time = time;
-
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 
     void recreateSwapChain() {

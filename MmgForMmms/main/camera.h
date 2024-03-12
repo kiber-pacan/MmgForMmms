@@ -11,6 +11,6 @@ class camData {
 public:
     glm::vec3 camPos, lookAt, upVector;
 
-    camData() : camPos{0, 0, 1}, lookAt{0, 0, 0}, upVector{0, 1, 0} { }
+    camData() : camPos{0, -2, 1}, lookAt{0, 0, 0}, upVector{0, -1, 0} { }
 };
 
