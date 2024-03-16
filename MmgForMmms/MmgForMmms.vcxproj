@@ -135,11 +135,34 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="libs\imgui\backends\imgui_impl_glfw.cpp" />
+    <ClCompile Include="libs\imgui\backends\imgui_impl_vulkan.cpp" />
+    <ClCompile Include="libs\imgui\imgui.cpp" />
+    <ClCompile Include="libs\imgui\imgui_demo.cpp" />
+    <ClCompile Include="libs\imgui\imgui_draw.cpp" />
+    <ClCompile Include="libs\imgui\imgui_tables.cpp" />
+    <ClCompile Include="libs\imgui\imgui_widgets.cpp" />
     <ClCompile Include="main\camera.h" />
     <ClCompile Include="main\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="main\movement.h" />
+    <ClInclude Include="libs\imgui\backends\imgui_impl_glfw.h" />
+    <ClInclude Include="libs\imgui\backends\imgui_impl_vulkan.h" />
+    <ClInclude Include="libs\imgui\imconfig.h" />
+    <ClInclude Include="libs\imgui\imgui.h" />
+    <ClInclude Include="libs\imgui\imgui_internal.h" />
+    <ClInclude Include="libs\imgui\imstb_rectpack.h" />
+    <ClInclude Include="libs\imgui\imstb_textedit.h" />
+    <ClInclude Include="libs\imgui\imstb_truetype.h" />
+    <ClInclude Include="main\controls.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="libs\imgui\LICENSE.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="libs\imgui\.editorconfig" />
+    <None Include="libs\imgui\.gitattributes" />
+    <None Include="libs\imgui\.gitignore" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
