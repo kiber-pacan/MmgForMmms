@@ -155,6 +155,8 @@
     <ClInclude Include="libs\imgui\imstb_textedit.h" />
     <ClInclude Include="libs\imgui\imstb_truetype.h" />
     <ClInclude Include="main\controls.h" />
+    <ClInclude Include="main\model\model.h" />
+    <ClInclude Include="main\model\XYZmodel.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="libs\imgui\LICENSE.txt" />

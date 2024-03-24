@@ -71,6 +71,12 @@
     <ClInclude Include="libs\imgui\backends\imgui_impl_glfw.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="main\model\XYZmodel.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="main\model\model.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="libs\imgui\LICENSE.txt" />

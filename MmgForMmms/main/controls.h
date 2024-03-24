@@ -13,7 +13,7 @@ bool firstMouse = true;
 
 //Movement
 float runningBonus = 4;
-float speed = 0.05f;
+float speed = 0.005f;
 
 float theta = glm::radians(90.f);
 

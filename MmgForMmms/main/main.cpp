@@ -36,6 +36,7 @@
 //CUSTOM
 #include <camera.h>
 #include <controls.h>
+#include <model/XYZmodel.h>
 
 using namespace std;
 
@@ -78,56 +79,6 @@ Colorful printf
     0m - default ASCII attributes
     \n - new line
 */
-
-struct Vertex {
-    glm::vec3 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
-    float time;
-
-    static VkVertexInputBindingDescription getBindingDescription() {
-        VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return bindingDescription;
-    }
-
-    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
-
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-        attributeDescriptions[2].binding = 0;
-        attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
-
-        return attributeDescriptions;
-    }
-    bool operator==(const Vertex& other) const {
-        return pos == other.pos && color == other.color && texCoord == other.texCoord;
-    }
-};
-
-namespace std {
-    template<> struct hash<Vertex> {
-        size_t operator()(Vertex const& vertex) const {
-            return ((hash<glm::vec3>()(vertex.pos) ^
-                (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
-                (hash<glm::vec2>()(vertex.texCoord) << 1);
-        }
-    };
-}
 
 struct UniformBufferObject {
     glm::mat4 model;
@@ -175,38 +126,29 @@ public:
         cleanup();
     }
 
+    float lastFrameTime = 0.0f;
+    double lastTime = 0.0f;
+
     //Main loop
     void mainLoop() {
 
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             drawFrame();
-            getDeltaTime();
-            keyCallback(window, deltaTime);
+            keyCallback(window, getDeltaTime());
             mouseCallback(window);
+            //std::cout << getDeltaTime() << std::endl;
         }
         vkDeviceWaitIdle(device);
     }
 
-    void getDeltaTime() {
-        uint32_t count = static_cast<uint32_t>(time_stamps.size());
+        std::vector<uint64_t> time_stamps{};
 
-        vkGetQueryPoolResults(
-            device,
-            queryPool,
-            0,
-            count,
-            time_stamps.size() * sizeof(uint64_t),
-            time_stamps.data(),
-            sizeof(uint64_t),
-            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
-
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-        VkPhysicalDeviceLimits device_limits = properties.limits;
-        float delta_in_ms = float(time_stamps[1] - time_stamps[0]) * device_limits.timestampPeriod / 1000000.0f;
-
-        deltaTime = delta_in_ms;
+    float getDeltaTime() {
+        double currentTime = glfwGetTime();
+        lastFrameTime = (currentTime - lastTime) * 1000.0;
+        lastTime = currentTime;
+        return lastFrameTime * 2.0f;
     }
 
 private:
@@ -275,8 +217,12 @@ private:
     VkImageView depthImageView;
 
     //Vertices and indices for storing models
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
+    //std::vector<Vertex> vertices;
+    //std::vector<uint32_t> indices;
+
+    //Models
+    std::vector <XYZmodel> models;
+    XYZmodel bunny;
 
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -288,7 +234,7 @@ private:
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     //Time stamps
-    std::vector<uint64_t> time_stamps{};
+    //std::array<uint64_t, MAX_FRAMES_IN_FLIGHT * 2> time_stamps{};
 
     //Init of GLFW window
     void initWindow() {
@@ -447,19 +393,72 @@ private:
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
-        loadModel();
+        //loadModel();
+        stresstest(10);
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
         createDescriptorPool();
         createDescriptorSets();
-        createQueryPool();
         createCommandBuffers();
         createSyncObjects();
+        //createQueryPool();
 
         //initDearImGui();
         printf("------------------------------------------------------------------------------------------------------------------------\n");
         printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "Vulkan API initialization complete!");
+    }
+
+    void renderImGui(VkCommandBuffer commandBuffer) {
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        if (show_demo_window)
+            ImGui::ShowDemoWindow(&show_demo_window);
+
+        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
+
+        static float f = 0.0f;
+        static int counter = 0;
+        ImGuiIO& io = ImGui::GetIO(); (void)io;
+        io.ConfigWindowsResizeFromEdges = false;
+
+        ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+        ImGui::SetWindowSize(ImVec2(300, 200));
+
+        ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
+        ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+        ImGui::Checkbox("Another Window", &show_another_window);
+
+        ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+        ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+
+        if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+            counter++;
+        ImGui::SameLine();
+        ImGui::Text("%d ms", deltaTime);
+
+
+
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        ImGui::End();
+
+
+        // 3. Show another simple window.
+        if (show_another_window)
+        {
+            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
+            ImGui::Text("Hello from another window!");
+            if (ImGui::Button("Close Me"))
+                show_another_window = false;
+            ImGui::End();
+        }
+
+        ImGui::Render();
+        ImDrawData* draw_data = ImGui::GetDrawData();
+
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, 0);
     }
 
     void createQueryPool() {
@@ -474,7 +473,11 @@ private:
         }
     }
 
-    void stresstest() {
+    void stresstest(int count) {
+        loadModelTo(bunny);
+        for (int i = 0; i <= count; i++) {
+            
+        }
     }
 
     void createDepthResources() {
@@ -513,7 +516,7 @@ private:
         throw std::runtime_error("failed to find supported format!");
     }
 
-    void loadModel() {
+    void loadModelTo(XYZmodel model) {
         tinyobj::ObjReaderConfig reader_config;
         reader_config.mtl_search_path = "./"; // Path to material files
 
@@ -554,11 +557,11 @@ private:
                 vertex.color = { 1.0f, 1.0f, 1.0f };
 
                 if (uniqueVertices.count(vertex) == 0) {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
-                    vertices.push_back(vertex);
+                    uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
+                    model.vertices.push_back(vertex);
                 }
 
-                indices.push_back(uniqueVertices[vertex]);
+                model.indices.push_back(uniqueVertices[vertex]);
             }
         }
     }
@@ -1075,8 +1078,6 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-        vkCmdResetQueryPool(commandBuffer, queryPool, 0, static_cast<uint32_t>(time_stamps.size()));
-
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderPassInfo.renderPass = renderPass;
@@ -1090,8 +1091,6 @@ private:
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
-        
-        
 
         //Start rendering
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -1120,74 +1119,18 @@ private:
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
-
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
 
         renderImGui(commandBuffer);
         
         vkCmdEndRenderPass(commandBuffer);
-
-        
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record command buffer!");
         }
     }
 
-    void renderImGui(VkCommandBuffer commandBuffer) {
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-
-        static float f = 0.0f;
-        static int counter = 0;
-        ImGuiIO& io = ImGui::GetIO(); (void)io;
-        io.ConfigWindowsResizeFromEdges = false;
-
-        ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-        ImGui::SetWindowSize(ImVec2(300, 200));
-
-        ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-        ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-        ImGui::Checkbox("Another Window", &show_another_window);
-
-        ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-        ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-        if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-            counter++;
-        ImGui::SameLine();
-        ImGui::Text("counter = %d", counter);
-
-
-
-        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-        ImGui::End();
-
-
-        // 3. Show another simple window.
-        if (show_another_window)
-        {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
-        }
-
-        ImGui::Render();
-        ImDrawData* draw_data = ImGui::GetDrawData();
-
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, 0);
-    }
+    
 
     void createFramebuffers() {
         swapChainFramebuffers.resize(swapChainImageViews.size());
