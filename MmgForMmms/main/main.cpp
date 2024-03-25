@@ -11,9 +11,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
-
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -36,7 +33,8 @@
 //CUSTOM
 #include <camera.h>
 #include <controls.h>
-#include <model/XYZmodel.h>
+#include <mdl/mdl.h>
+#include <mdl/mdlInst.h>
 
 using namespace std;
 
@@ -117,6 +115,11 @@ float deltaTime;
 class MmgForMmmsApp {
 
 public:
+    MmgForMmmsApp() {
+
+    }
+
+
     void run() {
         initWindow();
         initVulkan();
@@ -216,13 +219,13 @@ private:
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
 
+    //Models
+    vector<mdl> mdls;
+    vector<mdlInst> mdlInsts;
+
     //Vertices and indices for storing models
     //std::vector<Vertex> vertices;
     //std::vector<uint32_t> indices;
-
-    //Models
-    std::vector <XYZmodel> models;
-    XYZmodel bunny;
 
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -232,6 +235,7 @@ private:
     bool show_demo_window = true;
     bool show_another_window = true;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
 
     //Time stamps
     //std::array<uint64_t, MAX_FRAMES_IN_FLIGHT * 2> time_stamps{};
@@ -371,12 +375,19 @@ private:
         ImGui_ImplVulkan_Init(&init_info);
     }
 
-
+    void loadModels() {
+        mdls[0] = mdl(1);
+        mdlInsts[0] = mdlInst(-2, 0, 0, mdls[0]);
+        mdlInsts[1] = mdlInst(0, 2, 1, mdls[0]);;
+    }
 
     //Init of Vulkan api
     void initVulkan() {
         printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "Initiliazing Vulkan API!");
 
+        //std::cout << bunny.vertices[1].pos[1] << std::endl;
+
+        loadModels();
         createInstance();
         setupDebugMessenger();
         createSurface();
@@ -393,8 +404,7 @@ private:
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
-        //loadModel();
-        stresstest(10);
+        //stresstest(10);
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
@@ -474,7 +484,6 @@ private:
     }
 
     void stresstest(int count) {
-        loadModelTo(bunny);
         for (int i = 0; i <= count; i++) {
             
         }
@@ -516,55 +525,7 @@ private:
         throw std::runtime_error("failed to find supported format!");
     }
 
-    void loadModelTo(XYZmodel model) {
-        tinyobj::ObjReaderConfig reader_config;
-        reader_config.mtl_search_path = "./"; // Path to material files
 
-        tinyobj::ObjReader reader;
-
-        if (!reader.ParseFromFile(INPUT_FILE, reader_config)) {
-            if (!reader.Error().empty()) {
-                std::cerr << "TinyObjReader: " << reader.Error();
-            }
-            exit(1);
-        }
-
-        if (!reader.Warning().empty()) {
-            std::cout << "TinyObjReader: " << reader.Warning();
-        }
-
-        auto& attrib = reader.GetAttrib();
-        auto& shapes = reader.GetShapes();
-        auto& materials = reader.GetMaterials();
-
-        std::unordered_map<Vertex, uint32_t> uniqueVertices{};
-
-        for (const auto& shape : shapes) {
-            for (const auto& index : shape.mesh.indices) {
-                Vertex vertex{};
-
-                vertex.pos = {
-                    attrib.vertices[3 * index.vertex_index + 0],
-                    attrib.vertices[3 * index.vertex_index + 1],
-                    attrib.vertices[3 * index.vertex_index + 2]
-                };
-
-                vertex.texCoord = {
-                    attrib.texcoords[2 * index.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                };
-
-                vertex.color = { 1.0f, 1.0f, 1.0f };
-
-                if (uniqueVertices.count(vertex) == 0) {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
-                    model.vertices.push_back(vertex);
-                }
-
-                model.indices.push_back(uniqueVertices[vertex]);
-            }
-        }
-    }
     //UBO in vertex shader
     void updateUniformBuffer(uint32_t currentImage) {
         static auto startTime = std::chrono::high_resolution_clock::now();
@@ -573,7 +534,7 @@ private:
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), 0.0f , glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.model = glm::translate(ubo.model, glm::vec3(bunnyInst.x, bunnyInst.y, bunnyInst.z));
 
         CameraData.direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
         CameraData.direction.y = sin(glm::radians(pitch));
@@ -992,15 +953,19 @@ private:
 
     //Method for creating vertex buffer that stores vertices
     void createVertexBuffer() {
-        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+        VkDeviceSize bufferSize = sizeof(mdlInsts[0].model.vertices[0]) * mdlInsts[0].model.vertices.size() +
+            sizeof(mdlInsts[1].model.vertices[1]) * mdlInsts[1].model.vertices.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
+        vector<Vertex> temp = mdlInsts[0].model.vertices;
+        temp.insert(temp.end(), mdlInsts[1].model.vertices.begin(), mdlInsts[1].model.vertices.end());
+
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, vertices.data(), (size_t)bufferSize);
+        memcpy(data, temp.data(), (size_t)bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
@@ -1013,15 +978,19 @@ private:
 
     //Creating index buffer that stores array of indexes for rendering triangles
     void createIndexBuffer() {
-        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+        VkDeviceSize bufferSize = sizeof(mdlInsts[0].model.indices[0]) * mdlInsts[0].model.indices.size() + 
+            sizeof(mdlInsts[1].model.indices[1]) * mdlInsts[1].model.indices.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
+        vector<uint32_t> temp = mdlInsts[0].model.indices;
+        temp.insert(temp.end(), mdlInsts[1].model.indices.begin(), mdlInsts[1].model.indices.end());
+
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, indices.data(), (size_t)bufferSize);
+        memcpy(data, temp.data(), (size_t)bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
@@ -1119,7 +1088,7 @@ private:
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mdlInsts[0].model.indices.size()) + static_cast<uint32_t>(mdlInsts[1].model.indices.size()), 1, 0, 0, 0);
 
         renderImGui(commandBuffer);
         
