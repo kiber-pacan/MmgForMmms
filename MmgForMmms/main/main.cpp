@@ -4,9 +4,9 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/hash.hpp>
+#include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
+#include <gtx/hash.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -29,12 +29,13 @@
 #include <optional>
 #include <set>
 #include <unordered_map>
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 //CUSTOM
 #include <camera.h>
 #include <controls.h>
-#include <mdl/mdl.h>
-#include <mdl/mdlInst.h>
+#include <mdl/models.hpp>
 
 using namespace std;
 
@@ -79,10 +80,9 @@ Colorful printf
 */
 
 struct UniformBufferObject {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
-    float time;
+    alignas(16) glm::mat4 model = glm::mat4(1);;
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
 };
 
 static std::vector<char> readFile(const std::string& filename) {
@@ -115,22 +115,7 @@ float deltaTime;
 class MmgForMmmsApp {
 
 public:
-    MmgForMmmsApp() {
-
-    }
-
-
-    void run() {
-        initWindow();
-        initVulkan();
-        initDearImGui();
-        mainLoop();
-        printf("\x1b[38;2;255;0;0m%s\x1b[0m\n", "Shutting down!");
-        cleanup();
-    }
-
-    float lastFrameTime = 0.0f;
-    double lastTime = 0.0f;
+    MmgForMmmsApp() {}
 
     //Main loop
     void mainLoop() {
@@ -145,16 +130,28 @@ public:
         vkDeviceWaitIdle(device);
     }
 
-        std::vector<uint64_t> time_stamps{};
+    void run() {
+        initWindow();
+        initVulkan();
+        initDearImGui();
+        mainLoop();
+        printf("\x1b[38;2;255;0;0m%s\x1b[0m\n", "Shutting down!");
+        cleanup();
+    }
 
     float getDeltaTime() {
         double currentTime = glfwGetTime();
-        lastFrameTime = (currentTime - lastTime) * 1000.0;
+        lastFrameTime = (currentTime - lastTime) 
+            * 1000.0;
         lastTime = currentTime;
         return lastFrameTime * 2.0f;
     }
 
 private:
+    #pragma region Vars
+    float lastFrameTime = 0.0f;
+    double lastTime = 0.0f;
+
     GLFWwindow* window;
 
     //Basics
@@ -219,14 +216,6 @@ private:
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
 
-    //Models
-    vector<mdl> mdls;
-    vector<mdlInst> mdlInsts;
-
-    //Vertices and indices for storing models
-    //std::vector<Vertex> vertices;
-    //std::vector<uint32_t> indices;
-
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
     bool framebufferResized = false;
@@ -236,9 +225,10 @@ private:
     bool show_another_window = true;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
 
-    //Time stamps
-    //std::array<uint64_t, MAX_FRAMES_IN_FLIGHT * 2> time_stamps{};
+    #pragma endregion Variables
 
     //Init of GLFW window
     void initWindow() {
@@ -333,14 +323,6 @@ private:
         printf("\x1b[38;2;21;237;79m%s\x1b[0m\n", "Cleaning successful!");
     }
 
-    static void check_vk_result(VkResult err) {
-        if (err == 0)
-            return;
-        fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
-        if (err < 0)
-            abort();
-    }
-
     void initDearImGui() {
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
@@ -375,50 +357,6 @@ private:
         ImGui_ImplVulkan_Init(&init_info);
     }
 
-    void loadModels() {
-        mdls[0] = mdl(1);
-        mdlInsts[0] = mdlInst(-2, 0, 0, mdls[0]);
-        mdlInsts[1] = mdlInst(0, 2, 1, mdls[0]);;
-    }
-
-    //Init of Vulkan api
-    void initVulkan() {
-        printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "Initiliazing Vulkan API!");
-
-        //std::cout << bunny.vertices[1].pos[1] << std::endl;
-
-        loadModels();
-        createInstance();
-        setupDebugMessenger();
-        createSurface();
-        pickPhysicalDevice();
-        createLogicalDevice();
-        createSwapChain();
-        createImageViews();
-        createRenderPass();
-        createDescriptorSetLayout();
-        createGraphicsPipeline();
-        createCommandPool();
-        createDepthResources();
-        createFramebuffers();
-        createTextureImage();
-        createTextureImageView();
-        createTextureSampler();
-        //stresstest(10);
-        createVertexBuffer();
-        createIndexBuffer();
-        createUniformBuffers();
-        createDescriptorPool();
-        createDescriptorSets();
-        createCommandBuffers();
-        createSyncObjects();
-        //createQueryPool();
-
-        //initDearImGui();
-        printf("------------------------------------------------------------------------------------------------------------------------\n");
-        printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "Vulkan API initialization complete!");
-    }
-
     void renderImGui(VkCommandBuffer commandBuffer) {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -434,8 +372,8 @@ private:
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         io.ConfigWindowsResizeFromEdges = false;
 
-        ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-        ImGui::SetWindowSize(ImVec2(300, 200));
+        ImGui::Begin("Mmg4Mmms!");                          // Create a window called "Hello, world!" and append into it.
+        ImGui::SetWindowSize(ImVec2(300, 220));
 
         ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
         ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
@@ -449,9 +387,9 @@ private:
         ImGui::SameLine();
         ImGui::Text("%d ms", deltaTime);
 
-
-
         ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        ImGui::Text("x %f, y %f,z %f", CameraData.camPos[0], CameraData.camPos[1], CameraData.camPos[2]);
+        ImGui::Text("a %f, b %f,c %f", CameraData.direction[0], CameraData.direction[1], CameraData.direction[2]);
         ImGui::End();
 
 
@@ -471,16 +409,38 @@ private:
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer, 0);
     }
 
-    void createQueryPool() {
-        time_stamps.resize(2);
+    //Init of Vulkan api
+    void initVulkan() {
+        printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "Initiliazing Vulkan API!");
 
-        VkQueryPoolCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-        info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        info.queryCount = static_cast<uint32_t>(time_stamps.size());
-        if (vkCreateQueryPool(device, &info, nullptr, &queryPool) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create query pool!");
-        }
+        loadModels();
+        createInstance();
+        setupDebugMessenger();
+        createSurface();
+        pickPhysicalDevice();
+        createLogicalDevice();
+        createSwapChain();
+        createImageViews();
+        createRenderPass();
+        createDescriptorSetLayout();
+        createGraphicsPipeline();
+        createCommandPool();
+        createDepthResources();
+        createFramebuffers();
+        createTextureImage();
+        createTextureImageView();
+        createTextureSampler();
+        createVertexBuffer();
+        createIndexBuffer();
+        createUniformBuffers();
+        createDescriptorPool();
+        createDescriptorSets();
+        createCommandBuffers();
+        createSyncObjects();
+
+        //initDearImGui();
+        printf("------------------------------------------------------------------------------------------------------------------------\n");
+        printf("\x1b[38;2;0;98;255m%s\x1b[0m\n", "Vulkan API initialization complete!");
     }
 
     void stresstest(int count) {
@@ -526,15 +486,12 @@ private:
     }
 
 
-    //UBO in vertex shader
+    //2 in vertex shader
     void updateUniformBuffer(uint32_t currentImage) {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         UniformBufferObject ubo{};
-        ubo.model = glm::translate(ubo.model, glm::vec3(bunnyInst.x, bunnyInst.y, bunnyInst.z));
+
+        ubo.model = glm::scale(ubo.model, glm::vec3(10, 10, 1));
 
         CameraData.direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
         CameraData.direction.y = sin(glm::radians(pitch));
@@ -543,7 +500,6 @@ private:
         ubo.view = glm::lookAt(CameraData.camPos, CameraData.camPos + glm::normalize(CameraData.direction), CameraData.upVector);
         ubo.proj = glm::perspective(glm::radians(120.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.01f, 256.0f);
         ubo.proj[1][1] *= -1;
-        ubo.time = time;
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
@@ -561,7 +517,7 @@ private:
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
         samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
@@ -669,6 +625,7 @@ private:
     }
 
 
+
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
@@ -717,6 +674,7 @@ private:
 
         endSingleTimeCommands(commandBuffer);
     }
+
 
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
@@ -953,19 +911,14 @@ private:
 
     //Method for creating vertex buffer that stores vertices
     void createVertexBuffer() {
-        VkDeviceSize bufferSize = sizeof(mdlInsts[0].model.vertices[0]) * mdlInsts[0].model.vertices.size() +
-            sizeof(mdlInsts[1].model.vertices[1]) * mdlInsts[1].model.vertices.size();
+        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-        vector<Vertex> temp = mdlInsts[0].model.vertices;
-        temp.insert(temp.end(), mdlInsts[1].model.vertices.begin(), mdlInsts[1].model.vertices.end());
-
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, temp.data(), (size_t)bufferSize);
+        memcpy(data, vertices.data(), (size_t)bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
@@ -978,19 +931,15 @@ private:
 
     //Creating index buffer that stores array of indexes for rendering triangles
     void createIndexBuffer() {
-        VkDeviceSize bufferSize = sizeof(mdlInsts[0].model.indices[0]) * mdlInsts[0].model.indices.size() + 
-            sizeof(mdlInsts[1].model.indices[1]) * mdlInsts[1].model.indices.size();
+        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
-        vector<uint32_t> temp = mdlInsts[0].model.indices;
-        temp.insert(temp.end(), mdlInsts[1].model.indices.begin(), mdlInsts[1].model.indices.end());
-
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, temp.data(), (size_t)bufferSize);
+        memcpy(data, indices.data(), (size_t)bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
@@ -1000,6 +949,8 @@ private:
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
+
+
 
     //Creating sync objects
     void createSyncObjects() {
@@ -1055,7 +1006,7 @@ private:
         renderPassInfo.renderArea.extent = swapChainExtent;
 
         std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+        clearValues[0].color = { {0.2f, 0.2f, 0.7f, 1.0f} };
         clearValues[1].depthStencil = { 1.0f, 0 };
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -1088,15 +1039,16 @@ private:
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mdlInsts[0].model.indices.size()) + static_cast<uint32_t>(mdlInsts[1].model.indices.size()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
-        renderImGui(commandBuffer);
-        
+        //renderImGui(commandBuffer);
+
         vkCmdEndRenderPass(commandBuffer);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record command buffer!");
         }
+
     }
 
     
@@ -1625,33 +1577,16 @@ private:
         resetFeatures.pNext = nullptr;
         resetFeatures.hostQueryReset = VK_TRUE;
 
-
-
-        VkPhysicalDeviceShaderClockFeaturesKHR shaderClock{};
-
-        shaderClock.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR;
-        shaderClock.pNext = &resetFeatures;
-        shaderClock.shaderSubgroupClock = VK_TRUE;
-        shaderClock.shaderDeviceClock = VK_TRUE;
-
         VkPhysicalDeviceFeatures deviceFeatures{};
         deviceFeatures.samplerAnisotropy = VK_TRUE;
         vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-
-        VkPhysicalDeviceFeatures2 deviceFeatures2{};
-        deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        deviceFeatures2.pNext = &shaderClock;
-        deviceFeatures2.features = deviceFeatures;
-
-        vkGetPhysicalDeviceFeatures2(physicalDevice, &deviceFeatures2);
 
         VkDeviceCreateInfo createInfo{};
 
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());;
-        createInfo.pEnabledFeatures = nullptr;
-        createInfo.pNext = &deviceFeatures2;
+        createInfo.pEnabledFeatures = nullptr;;
         createInfo.enabledExtensionCount = 0;
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
@@ -1740,10 +1675,10 @@ private:
 
         updateUniformBuffer(currentFrame);
 
-        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
-
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
+        vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
