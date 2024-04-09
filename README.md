@@ -1,6 +1,7 @@
-# Man made game for man made mens (MmgForMmms)
+# Man made game for man made mens (Mmg4Mmms)
 Current project state :shipit:
 
-![image](https://github.com/kiber-pacan/MmgForMmms/assets/153371235/117048ed-cf9c-43a1-83b4-44de75f71e5e)
+![image](https://github.com/kiber-pacan/MmgForMmms/assets/153371235/7db41c2a-fe69-4b19-813b-2d1d32be4453)
+
 
 
